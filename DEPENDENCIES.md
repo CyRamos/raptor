@@ -47,6 +47,27 @@ RAPTOR **requires users to install** these external tools. RAPTOR does not bundl
 - Usage: RAPTOR calls `codeql` command for deep analysis
 - Note: User installs separately
 
+**rr** (Record-replay debugger)
+- Install: `apt install rr` (Linux) or build from https://github.com/rr-debugger/rr
+- License: MIT
+- Source: https://github.com/rr-debugger/rr
+- Usage: RAPTOR uses for deterministic debugging in /crash-analysis command
+- Note: User installs separately, Linux only (x86_64)
+
+**gcov** (Code coverage tool)
+- Install: Bundled with gcc (no separate install needed)
+- License: GPL (part of GCC)
+- Source: https://gcc.gnu.org/onlinedocs/gcc/Gcov.html
+- Usage: RAPTOR uses for code coverage analysis in /crash-analysis command
+- Note: Automatically available with gcc installation
+
+**AddressSanitizer** (Memory error detector)
+- Install: Built into gcc >= 4.8 and clang >= 3.1 (compile flag: `-fsanitize=address`)
+- License: Apache 2.0
+- Source: https://github.com/google/sanitizers
+- Usage: RAPTOR detects ASAN builds for enhanced crash diagnostics
+- Note: Compile-time instrumentation, enabled via compiler flag
+
 ### System Tools (Pre-installed on Most Systems)
 
 **LLDB** (Debugger)
