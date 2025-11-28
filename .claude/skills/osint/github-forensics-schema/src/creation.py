@@ -186,12 +186,6 @@ class GHArchiveQuery(BaseModel):
         return self
 
 
-class IOCQuery(BaseModel):
-    """Query for creating an IOC."""
-
-    ioc_type: IOCType
-    value: str = Field(..., min_length=1)
-    source_url: HttpUrl | None = None
 
 
 # =============================================================================
@@ -910,134 +904,223 @@ def create_event_from_gharchive(row: dict[str, Any]) -> AnyEvent:
 # =============================================================================
 
 
-def create_issue_observation_from_gharchive(row: dict[str, Any]) -> IssueObservation:
-    """Create IssueObservation from GH Archive IssuesEvent.
+def create_issue_observation_from_gharchive(
+    repo: str,
+    issue_number: int,
+    date: str,
+    client: GHArchiveClient,
+) -> IssueObservation:
+    """Query GH Archive and create IssueObservation.
 
-    Recovers deleted issue content - title and body are preserved in archive
-    even after issue is deleted from GitHub.
+    Goes to source (BigQuery) to verify and recover deleted issue content.
     """
-    payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
-    owner, name = row["repo_name"].split("/", 1)
-    issue = payload.get("issue", {})
+    owner, name = repo.split("/", 1)
 
-    state = issue.get("state", "open")
-
-    return IssueObservation(
-        evidence_id=_generate_evidence_id("issue-gharchive", row["repo_name"], str(issue.get("number", 0))),
-        original_when=_parse_datetime(issue.get("created_at")),
-        original_who=_make_github_actor(issue.get("user", {}).get("login", row["actor_login"])),
-        original_what=f"Issue #{issue.get('number')} created",
-        observed_when=_parse_datetime(row["created_at"]),
-        observed_by=EvidenceSource.GHARCHIVE,
-        observed_what=f"Issue #{issue.get('number')} recovered from GH Archive",
-        repository=_make_github_repo(owner, name, row.get("repo_id")),
-        verification=VerificationInfo(
-            source=EvidenceSource.GHARCHIVE,
-            bigquery_table="githubarchive.day.*",
-            query=f"repo.name='{row['repo_name']}' AND type='IssuesEvent'",
-        ),
-        issue_number=issue.get("number", 0),
-        is_pull_request=False,
-        title=issue.get("title"),
-        body=issue.get("body"),
-        state=state,
-        is_deleted=True,  # Assumed deleted since we're recovering from archive
+    # Query BigQuery for the specific issue
+    rows = client.query_events(
+        repo=repo,
+        event_type="IssuesEvent",
+        from_date=date,
     )
 
+    # Find matching issue
+    for row in rows:
+        payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+        issue = payload.get("issue", {})
+        if issue.get("number") == issue_number:
+            state = issue.get("state", "open")
+            return IssueObservation(
+                evidence_id=_generate_evidence_id("issue-gharchive", repo, str(issue_number)),
+                original_when=_parse_datetime(issue.get("created_at")),
+                original_who=_make_github_actor(issue.get("user", {}).get("login", row["actor_login"])),
+                original_what=f"Issue #{issue_number} created",
+                observed_when=_parse_datetime(row["created_at"]),
+                observed_by=EvidenceSource.GHARCHIVE,
+                observed_what=f"Issue #{issue_number} recovered from GH Archive",
+                repository=_make_github_repo(owner, name, row.get("repo_id")),
+                verification=VerificationInfo(
+                    source=EvidenceSource.GHARCHIVE,
+                    bigquery_table=f"githubarchive.day.{date}",
+                    query=f"repo.name='{repo}' AND type='IssuesEvent'",
+                ),
+                issue_number=issue_number,
+                is_pull_request=False,
+                title=issue.get("title"),
+                body=issue.get("body"),
+                state=state,
+                is_deleted=True,
+            )
 
-def create_pr_observation_from_gharchive(row: dict[str, Any]) -> IssueObservation:
-    """Create IssueObservation (PR) from GH Archive PullRequestEvent.
+    raise ValueError(f"Issue #{issue_number} not found in GH Archive for {repo} on {date}")
 
-    Recovers deleted PR content - title and body are preserved in archive
-    even after PR is deleted from GitHub.
+
+def create_pr_observation_from_gharchive(
+    repo: str,
+    pr_number: int,
+    date: str,
+    client: GHArchiveClient,
+) -> IssueObservation:
+    """Query GH Archive and create PR observation.
+
+    Goes to source (BigQuery) to verify and recover deleted PR content.
     """
-    payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
-    owner, name = row["repo_name"].split("/", 1)
-    pr = payload.get("pull_request", {})
+    owner, name = repo.split("/", 1)
 
-    state = pr.get("state", "open")
-    if pr.get("merged"):
-        state = "merged"
-
-    return IssueObservation(
-        evidence_id=_generate_evidence_id("pr-gharchive", row["repo_name"], str(pr.get("number", 0))),
-        original_when=_parse_datetime(pr.get("created_at")),
-        original_who=_make_github_actor(pr.get("user", {}).get("login", row["actor_login"])),
-        original_what=f"PR #{pr.get('number')} created",
-        observed_when=_parse_datetime(row["created_at"]),
-        observed_by=EvidenceSource.GHARCHIVE,
-        observed_what=f"PR #{pr.get('number')} recovered from GH Archive",
-        repository=_make_github_repo(owner, name, row.get("repo_id")),
-        verification=VerificationInfo(
-            source=EvidenceSource.GHARCHIVE,
-            bigquery_table="githubarchive.day.*",
-            query=f"repo.name='{row['repo_name']}' AND type='PullRequestEvent'",
-        ),
-        issue_number=pr.get("number", 0),
-        is_pull_request=True,
-        title=pr.get("title"),
-        body=pr.get("body"),
-        state=state,
-        is_deleted=True,  # Assumed deleted since we're recovering from archive
+    rows = client.query_events(
+        repo=repo,
+        event_type="PullRequestEvent",
+        from_date=date,
     )
+
+    for row in rows:
+        payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+        pr = payload.get("pull_request", {})
+        if pr.get("number") == pr_number:
+            state = pr.get("state", "open")
+            if pr.get("merged"):
+                state = "merged"
+            return IssueObservation(
+                evidence_id=_generate_evidence_id("pr-gharchive", repo, str(pr_number)),
+                original_when=_parse_datetime(pr.get("created_at")),
+                original_who=_make_github_actor(pr.get("user", {}).get("login", row["actor_login"])),
+                original_what=f"PR #{pr_number} created",
+                observed_when=_parse_datetime(row["created_at"]),
+                observed_by=EvidenceSource.GHARCHIVE,
+                observed_what=f"PR #{pr_number} recovered from GH Archive",
+                repository=_make_github_repo(owner, name, row.get("repo_id")),
+                verification=VerificationInfo(
+                    source=EvidenceSource.GHARCHIVE,
+                    bigquery_table=f"githubarchive.day.{date}",
+                    query=f"repo.name='{repo}' AND type='PullRequestEvent'",
+                ),
+                issue_number=pr_number,
+                is_pull_request=True,
+                title=pr.get("title"),
+                body=pr.get("body"),
+                state=state,
+                is_deleted=True,
+            )
+
+    raise ValueError(f"PR #{pr_number} not found in GH Archive for {repo} on {date}")
 
 
 def create_commit_observation_from_gharchive(
-    row: dict[str, Any],
-    commit_index: int = 0,
+    repo: str,
+    sha: str,
+    date: str,
+    client: GHArchiveClient,
 ) -> CommitObservation:
-    """Create CommitObservation from GH Archive PushEvent.
+    """Query GH Archive and create CommitObservation.
 
-    Recovers commit metadata from archive - useful for deleted repos
-    or force-pushed commits. Note: only metadata, not full diff.
+    Goes to source (BigQuery) to verify and recover commit metadata.
+    Useful for deleted repos or force-pushed commits.
     """
-    payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
-    owner, name = row["repo_name"].split("/", 1)
-    commits = payload.get("commits", [])
+    owner, name = repo.split("/", 1)
 
-    if not commits or commit_index >= len(commits):
-        raise ValueError(f"No commit at index {commit_index} in PushEvent")
-
-    commit = commits[commit_index]
-
-    return CommitObservation(
-        evidence_id=_generate_evidence_id("commit-gharchive", row["repo_name"], commit["sha"]),
-        original_when=_parse_datetime(row["created_at"]),
-        original_who=GitHubActor(login=commit.get("author", {}).get("name", "")),
-        original_what=commit.get("message", "").split("\n")[0],
-        observed_when=_parse_datetime(row["created_at"]),
-        observed_by=EvidenceSource.GHARCHIVE,
-        observed_what=f"Commit {commit['sha'][:8]} recovered from GH Archive",
-        repository=_make_github_repo(owner, name, row.get("repo_id")),
-        verification=VerificationInfo(
-            source=EvidenceSource.GHARCHIVE,
-            bigquery_table="githubarchive.day.*",
-            query=f"repo.name='{row['repo_name']}' AND type='PushEvent'",
-        ),
-        sha=commit["sha"],
-        message=commit.get("message", ""),
-        author=CommitAuthor(
-            name=commit.get("author", {}).get("name", ""),
-            email=commit.get("author", {}).get("email", ""),
-            date=_parse_datetime(row["created_at"]),
-        ),
-        committer=CommitAuthor(
-            name=commit.get("author", {}).get("name", ""),
-            email=commit.get("author", {}).get("email", ""),
-            date=_parse_datetime(row["created_at"]),
-        ),
-        parents=[],
-        files=[],
-        is_dangling=True,  # Recovered from archive, may not be on any branch
+    rows = client.query_events(
+        repo=repo,
+        event_type="PushEvent",
+        from_date=date,
     )
 
+    for row in rows:
+        payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+        for commit in payload.get("commits", []):
+            if commit["sha"].startswith(sha) or sha.startswith(commit["sha"]):
+                return CommitObservation(
+                    evidence_id=_generate_evidence_id("commit-gharchive", repo, commit["sha"]),
+                    original_when=_parse_datetime(row["created_at"]),
+                    original_who=GitHubActor(login=commit.get("author", {}).get("name", "")),
+                    original_what=commit.get("message", "").split("\n")[0],
+                    observed_when=_parse_datetime(row["created_at"]),
+                    observed_by=EvidenceSource.GHARCHIVE,
+                    observed_what=f"Commit {commit['sha'][:8]} recovered from GH Archive",
+                    repository=_make_github_repo(owner, name, row.get("repo_id")),
+                    verification=VerificationInfo(
+                        source=EvidenceSource.GHARCHIVE,
+                        bigquery_table=f"githubarchive.day.{date}",
+                        query=f"repo.name='{repo}' AND type='PushEvent'",
+                    ),
+                    sha=commit["sha"],
+                    message=commit.get("message", ""),
+                    author=CommitAuthor(
+                        name=commit.get("author", {}).get("name", ""),
+                        email=commit.get("author", {}).get("email", ""),
+                        date=_parse_datetime(row["created_at"]),
+                    ),
+                    committer=CommitAuthor(
+                        name=commit.get("author", {}).get("name", ""),
+                        email=commit.get("author", {}).get("email", ""),
+                        date=_parse_datetime(row["created_at"]),
+                    ),
+                    parents=[],
+                    files=[],
+                    is_dangling=True,
+                )
 
-def create_all_commit_observations_from_gharchive(row: dict[str, Any]) -> list[CommitObservation]:
-    """Create CommitObservations for all commits in a PushEvent."""
-    payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
-    commits = payload.get("commits", [])
+    raise ValueError(f"Commit {sha} not found in GH Archive for {repo} on {date}")
 
-    return [create_commit_observation_from_gharchive(row, i) for i in range(len(commits))]
+
+def create_force_push_observations_from_gharchive(
+    repo: str,
+    date: str,
+    client: GHArchiveClient,
+) -> list[CommitObservation]:
+    """Query GH Archive for zero-commit PushEvents (force pushes).
+
+    Recovers 'deleted' commit SHAs from force push before field.
+    Returns observations for commits that were overwritten.
+    """
+    owner, name = repo.split("/", 1)
+
+    rows = client.query_events(
+        repo=repo,
+        event_type="PushEvent",
+        from_date=date,
+    )
+
+    observations = []
+    for row in rows:
+        payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+        size = int(payload.get("size", 0))
+        before_sha = payload.get("before", "0" * 40)
+
+        # Zero commits + non-null before = force push
+        if size == 0 and before_sha != "0" * 40:
+            observations.append(
+                CommitObservation(
+                    evidence_id=_generate_evidence_id("forcepush-gharchive", repo, before_sha),
+                    original_when=_parse_datetime(row["created_at"]),
+                    original_who=_make_github_actor(row["actor_login"]),
+                    original_what=f"Commit overwritten by force push",
+                    observed_when=_parse_datetime(row["created_at"]),
+                    observed_by=EvidenceSource.GHARCHIVE,
+                    observed_what=f"Force push detected, before SHA: {before_sha[:8]}",
+                    repository=_make_github_repo(owner, name, row.get("repo_id")),
+                    verification=VerificationInfo(
+                        source=EvidenceSource.GHARCHIVE,
+                        bigquery_table=f"githubarchive.day.{date}",
+                        query=f"repo.name='{repo}' AND type='PushEvent' AND size=0",
+                    ),
+                    sha=before_sha,
+                    message="[Force pushed - message unknown, fetch via GitHub API]",
+                    author=CommitAuthor(
+                        name="unknown",
+                        email="unknown",
+                        date=_parse_datetime(row["created_at"]),
+                    ),
+                    committer=CommitAuthor(
+                        name="unknown",
+                        email="unknown",
+                        date=_parse_datetime(row["created_at"]),
+                    ),
+                    parents=[],
+                    files=[],
+                    is_dangling=True,
+                )
+            )
+
+    return observations
 
 
 # =============================================================================
@@ -1380,25 +1463,74 @@ def create_snapshot_observation(
 
 
 def create_ioc(
-    query: IOCQuery,
+    ioc_type: IOCType,
+    value: str,
+    source_url: HttpUrl | None = None,
     confidence: str = "medium",
-    observed_when: datetime | None = None,
     extracted_from: str | None = None,
+    github_client: GitHubClient | None = None,
+    wayback_client: WaybackClient | None = None,
 ) -> IOC:
-    """Create an IOC (Indicator of Compromise)."""
-    now = observed_when or datetime.now(timezone.utc)
+    """Create an IOC with optional verification and enrichment.
+
+    For commit_sha: verifies existence via GitHub API
+    For url: checks for Wayback snapshots
+    For repository: verifies repo exists
+    """
+    now = datetime.now(timezone.utc)
+    verified = False
+    verification_url = source_url
+    observed_by = EvidenceSource.SECURITY_VENDOR
+
+    # Enrich based on IOC type
+    if ioc_type == IOCType.COMMIT_SHA and github_client and "/" in (extracted_from or ""):
+        # Try to verify commit exists
+        try:
+            repo = extracted_from.split("#")[0] if extracted_from else ""
+            if "/" in repo:
+                owner, name = repo.split("/", 1)
+                data = github_client.get_commit(owner, name, value)
+                verified = True
+                verification_url = HttpUrl(data["html_url"])
+                observed_by = EvidenceSource.GITHUB
+                confidence = "confirmed"
+        except Exception:
+            pass  # Keep original confidence
+
+    elif ioc_type == IOCType.URL and wayback_client:
+        # Check if URL is archived
+        try:
+            results = wayback_client.search_cdx(value, limit=1)
+            if results:
+                verified = True
+                observed_by = EvidenceSource.WAYBACK
+        except Exception:
+            pass
+
+    elif ioc_type == IOCType.REPOSITORY and github_client:
+        # Verify repo exists
+        try:
+            if "/" in value:
+                owner, name = value.split("/", 1)
+                data = github_client.get_repo(owner, name)
+                verified = True
+                verification_url = HttpUrl(data["html_url"])
+                observed_by = EvidenceSource.GITHUB
+                confidence = "confirmed"
+        except Exception:
+            pass
 
     return IOC(
-        evidence_id=_generate_evidence_id("ioc", query.ioc_type.value, query.value),
+        evidence_id=_generate_evidence_id("ioc", ioc_type.value, value),
         observed_when=now,
-        observed_by=EvidenceSource.SECURITY_VENDOR,
-        observed_what=f"IOC {query.ioc_type.value}: {query.value[:50]}...",
+        observed_by=observed_by,
+        observed_what=f"IOC {ioc_type.value}: {value[:50]}{'...' if len(value) > 50 else ''}" + (" [verified]" if verified else ""),
         verification=VerificationInfo(
-            source=EvidenceSource.SECURITY_VENDOR,
-            url=query.source_url,
+            source=observed_by,
+            url=verification_url,
         ),
-        ioc_type=query.ioc_type,
-        value=query.value,
+        ioc_type=ioc_type,
+        value=value,
         confidence=confidence,
         first_seen=now,
         last_seen=now,
@@ -1548,13 +1680,35 @@ class EvidenceFactory:
         value: str,
         source_url: str | None = None,
         confidence: str = "medium",
+        extracted_from: str | None = None,
     ) -> IOC:
-        """Create an IOC."""
+        """Create an IOC with verification and enrichment."""
         if isinstance(ioc_type, str):
             ioc_type = IOCType(ioc_type)
-        query = IOCQuery(
+        return create_ioc(
             ioc_type=ioc_type,
             value=value,
             source_url=HttpUrl(source_url) if source_url else None,
+            confidence=confidence,
+            extracted_from=extracted_from,
+            github_client=self.github,
+            wayback_client=self.wayback,
         )
-        return create_ioc(query, confidence=confidence)
+
+    # GH Archive recovery methods
+
+    def recover_issue(self, repo: str, issue_number: int, date: str) -> IssueObservation:
+        """Recover deleted issue content from GH Archive."""
+        return create_issue_observation_from_gharchive(repo, issue_number, date, self.gharchive)
+
+    def recover_pr(self, repo: str, pr_number: int, date: str) -> IssueObservation:
+        """Recover deleted PR content from GH Archive."""
+        return create_pr_observation_from_gharchive(repo, pr_number, date, self.gharchive)
+
+    def recover_commit(self, repo: str, sha: str, date: str) -> CommitObservation:
+        """Recover commit metadata from GH Archive."""
+        return create_commit_observation_from_gharchive(repo, sha, date, self.gharchive)
+
+    def find_force_pushes(self, repo: str, date: str) -> list[CommitObservation]:
+        """Find force-pushed (overwritten) commits from GH Archive."""
+        return create_force_push_observations_from_gharchive(repo, date, self.gharchive)

@@ -20,7 +20,6 @@ from .creation import (
     WikiQuery,
     WaybackQuery,
     GHArchiveQuery,
-    IOCQuery,
     # Source Clients
     GitHubClient,
     WaybackClient,
@@ -46,7 +45,7 @@ from .creation import (
     create_issue_observation_from_gharchive,
     create_pr_observation_from_gharchive,
     create_commit_observation_from_gharchive,
-    create_all_commit_observations_from_gharchive,
+    create_force_push_observations_from_gharchive,
     # Observation Creators - From GitHub/Wayback
     create_commit_observation,
     create_commit_observation_from_git,
@@ -165,7 +164,6 @@ __all__ = [
     "WikiQuery",
     "WaybackQuery",
     "GHArchiveQuery",
-    "IOCQuery",
     # Creation - Source Clients
     "GitHubClient",
     "WaybackClient",
@@ -191,7 +189,7 @@ __all__ = [
     "create_issue_observation_from_gharchive",
     "create_pr_observation_from_gharchive",
     "create_commit_observation_from_gharchive",
-    "create_all_commit_observations_from_gharchive",
+    "create_force_push_observations_from_gharchive",
     # Creation - Observation Creators (GitHub/Wayback)
     "create_commit_observation",
     "create_commit_observation_from_git",
