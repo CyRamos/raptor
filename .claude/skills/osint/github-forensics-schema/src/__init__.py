@@ -3,8 +3,61 @@ GitHub Forensics Evidence Schema
 
 Event: when, who, what (something happened)
 Observation: original (when/who/what) + observer (when/by/what)
+
+Creation functions for verified evidence objects.
 """
 
+from .creation import (
+    # Query Models
+    RepositoryQuery,
+    CommitQuery,
+    IssueQuery,
+    FileQuery,
+    BranchQuery,
+    TagQuery,
+    ReleaseQuery,
+    ForkQuery,
+    WikiQuery,
+    WaybackQuery,
+    GHArchiveQuery,
+    # Source Clients
+    GitHubClient,
+    WaybackClient,
+    GHArchiveClient,
+    GitClient,
+    # Factory
+    EvidenceFactory,
+    # Event Creators
+    create_push_event_from_gharchive,
+    create_pull_request_event_from_gharchive,
+    create_issue_event_from_gharchive,
+    create_issue_comment_event_from_gharchive,
+    create_create_event_from_gharchive,
+    create_delete_event_from_gharchive,
+    create_fork_event_from_gharchive,
+    create_workflow_run_event_from_gharchive,
+    create_release_event_from_gharchive,
+    create_watch_event_from_gharchive,
+    create_member_event_from_gharchive,
+    create_public_event_from_gharchive,
+    create_event_from_gharchive,
+    # Observation Creators - From GH Archive (deleted content recovery)
+    create_issue_observation_from_gharchive,
+    create_pr_observation_from_gharchive,
+    create_commit_observation_from_gharchive,
+    create_force_push_observation_from_gharchive,
+    # Observation Creators - From GitHub/Wayback
+    create_commit_observation,
+    create_commit_observation_from_git,
+    create_issue_observation,
+    create_file_observation,
+    create_branch_observation,
+    create_tag_observation,
+    create_release_observation,
+    create_fork_observations,
+    create_snapshot_observation,
+    create_ioc,
+)
 from .schema import (
     # Enums
     EvidenceSource,
@@ -54,6 +107,7 @@ from .schema import (
 )
 
 __all__ = [
+    # Schema - Enums
     "EvidenceSource",
     "EventType",
     "RefType",
@@ -61,9 +115,11 @@ __all__ = [
     "IssueAction",
     "WorkflowConclusion",
     "IOCType",
+    # Schema - Common
     "GitHubActor",
     "GitHubRepository",
     "VerificationInfo",
+    # Schema - Events
     "Event",
     "CommitInPush",
     "PushEvent",
@@ -79,6 +135,7 @@ __all__ = [
     "MemberEvent",
     "PublicEvent",
     "AnyEvent",
+    # Schema - Observations
     "Observation",
     "CommitAuthor",
     "FileChange",
@@ -95,4 +152,53 @@ __all__ = [
     "IOC",
     "AnyObservation",
     "AnyEvidence",
+    # Creation - Query Models
+    "RepositoryQuery",
+    "CommitQuery",
+    "IssueQuery",
+    "FileQuery",
+    "BranchQuery",
+    "TagQuery",
+    "ReleaseQuery",
+    "ForkQuery",
+    "WikiQuery",
+    "WaybackQuery",
+    "GHArchiveQuery",
+    # Creation - Source Clients
+    "GitHubClient",
+    "WaybackClient",
+    "GHArchiveClient",
+    "GitClient",
+    # Creation - Factory
+    "EvidenceFactory",
+    # Creation - Event Creators
+    "create_push_event_from_gharchive",
+    "create_pull_request_event_from_gharchive",
+    "create_issue_event_from_gharchive",
+    "create_issue_comment_event_from_gharchive",
+    "create_create_event_from_gharchive",
+    "create_delete_event_from_gharchive",
+    "create_fork_event_from_gharchive",
+    "create_workflow_run_event_from_gharchive",
+    "create_release_event_from_gharchive",
+    "create_watch_event_from_gharchive",
+    "create_member_event_from_gharchive",
+    "create_public_event_from_gharchive",
+    "create_event_from_gharchive",
+    # Creation - Observation Creators (GH Archive - deleted content recovery)
+    "create_issue_observation_from_gharchive",
+    "create_pr_observation_from_gharchive",
+    "create_commit_observation_from_gharchive",
+    "create_force_push_observation_from_gharchive",
+    # Creation - Observation Creators (GitHub/Wayback)
+    "create_commit_observation",
+    "create_commit_observation_from_git",
+    "create_issue_observation",
+    "create_file_observation",
+    "create_branch_observation",
+    "create_tag_observation",
+    "create_release_observation",
+    "create_fork_observations",
+    "create_snapshot_observation",
+    "create_ioc",
 ]
