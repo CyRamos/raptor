@@ -4,6 +4,8 @@
 # Python
 *.pyc
 __pycache__/
+.venv/
+.pytest_cache/
 
 # RAPTOR outputs
 out/
