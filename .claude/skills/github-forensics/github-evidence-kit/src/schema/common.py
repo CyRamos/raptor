@@ -123,14 +123,3 @@ class VerificationResult(BaseModel):
     errors: list[str] = []
 
 
-# =============================================================================
-# TYPE ALIASES (for type hints and imports)
-# =============================================================================
-
-# Forward references to avoid circular imports
-# These will be properly resolved when importing from events/observations modules
-from typing import Any
-
-AnyEvent = Any  # Will be Union of all Event subclasses
-AnyObservation = Any  # Will be Union of all Observation subclasses  
-AnyEvidence = Any  # Will be Union[AnyEvent, AnyObservation]

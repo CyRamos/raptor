@@ -272,15 +272,12 @@ All 12 GitHub event types are supported:
 ## IOC Types
 
 ```python
-from src import IOCType
-from src.collectors import GitHubAPICollector
-
-# IOCs are currently created directly as schema objects
-from src.schema.observations import IOC
-from src.schema.common import EvidenceSource, VerificationInfo
+from src import EvidenceSource, IOCType
+from src.schema import IOC, VerificationInfo
 from pydantic import HttpUrl
 from datetime import datetime, timezone
 
+# IOCs are created directly as schema objects
 ioc = IOC(
     evidence_id="ioc-commit-sha-abc123",
     observed_when=datetime.now(timezone.utc),
@@ -302,7 +299,7 @@ Available IOC types: `COMMIT_SHA`, `FILE_PATH`, `FILE_HASH`, `CODE_SNIPPET`, `EM
 ### Run Unit Tests
 
 ```bash
-cd .claude/skills/osint/gh-evidence-kit
+cd .claude/skills/github-forensics/github-evidence-kit
 pip install -r requirements.txt
 pytest tests/ -v --ignore=tests/test_integration.py
 ```

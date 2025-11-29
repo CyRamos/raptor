@@ -283,16 +283,21 @@ class ConsistencyVerifier:
     # GH ARCHIVE VERIFICATION
     # =========================================================================
 
+    def _has_gharchive_credentials(self) -> bool:
+        """Check if GH Archive BigQuery credentials are available."""
+        try:
+            self.gharchive_client._get_client()
+            return True
+        except Exception:
+            return False
+
     def _verify_gharchive_event(self, event: Event) -> VerificationResult:
         """Verify event against GH Archive BigQuery."""
         if not event.verification.bigquery_table:
             return VerificationResult(is_valid=False, errors=["No BigQuery table specified"])
 
-        try:
-            # Check if we have credentials by trying to get the client
-            self.gharchive_client._get_client()
-        except Exception:
-             return VerificationResult(is_valid=True, errors=["GH Archive verification skipped - no credentials"])
+        if not self._has_gharchive_credentials():
+            return VerificationResult(is_valid=True, errors=["GH Archive verification skipped - no credentials"])
 
         try:
             rows = self.gharchive_client.query_events(
@@ -311,10 +316,7 @@ class ConsistencyVerifier:
         if not obs.verification.bigquery_table:
             return VerificationResult(is_valid=False, errors=["No BigQuery table specified"])
 
-        try:
-            # Check if we have credentials by trying to get the client
-            self.gharchive_client._get_client()
-        except Exception:
-             return VerificationResult(is_valid=True, errors=["GH Archive verification skipped - no credentials"])
+        if not self._has_gharchive_credentials():
+            return VerificationResult(is_valid=True, errors=["GH Archive verification skipped - no credentials"])
 
         return VerificationResult(is_valid=True, errors=[])

@@ -4,7 +4,7 @@ Shared pytest fixtures for github-forensics-schema tests.
 Provides:
 - Fixture data loaders
 - Sample evidence data
-- EvidenceFactory and EvidenceStore instances
+- EvidenceStore instances
 """
 
 import json
@@ -206,12 +206,8 @@ def sample_issue_event(sample_issue_event_data):
 
 
 # =============================================================================
-# FACTORY AND STORE FIXTURES
+# STORE FIXTURES
 # =============================================================================
-
-
-    """Create a fresh EvidenceFactory instance."""
-    return EvidenceFactory()
 
 
 @pytest.fixture

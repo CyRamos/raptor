@@ -13,9 +13,6 @@ from .common import (
     GitHubRepository,
     VerificationInfo,
     VerificationResult,
-    AnyEvent,
-    AnyObservation,
-    AnyEvidence,
 )
 from .events import (
     Event,
@@ -32,6 +29,7 @@ from .events import (
     WatchEvent,
     MemberEvent,
     PublicEvent,
+    AnyEvent,
 )
 from .observations import (
     Observation,
@@ -48,7 +46,11 @@ from .observations import (
     SnapshotObservation,
     IOC,
     ArticleObservation,
+    AnyObservation,
 )
+
+# Combined type alias for any evidence type
+AnyEvidence = AnyEvent | AnyObservation
 
 __all__ = [
     # Enums

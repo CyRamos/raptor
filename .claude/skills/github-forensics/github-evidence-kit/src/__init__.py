@@ -1,56 +1,38 @@
 """
-GitHub Forensics Evidence Schema
+GitHub Evidence Kit - Evidence collection and verification for GitHub forensics.
 
-Evidence collection using Collectors that fetch data from trusted sources.
+Evidence collection uses Collectors that fetch data from trusted sources:
 
-Usage:
     from src.collectors.api import GitHubAPICollector
     from src.collectors.archive import GHArchiveCollector
     from src.collectors.local import LocalGitCollector
 
-    # Collectors for various sources
+    # Collect evidence from various sources
     github_collector = GitHubAPICollector()
     archive_collector = GHArchiveCollector()
     git_collector = LocalGitCollector()
 
-    # Collect evidence
     commit = github_collector.collect_commit("aws", "aws-toolkit-vscode", "678851b...")
     events = archive_collector.collect_events(timestamp="202507132037", repo="aws/aws-toolkit-vscode")
-    local_commit = git_collector.collect_commit("HEAD")
 
 For loading previously serialized evidence from JSON:
+
     from src import load_evidence_from_json
     evidence = load_evidence_from_json(json_data)
 
-Type hints (for static analysis and IDE autocomplete):
-    from typing import TYPE_CHECKING
-    if TYPE_CHECKING:
-        from src import CommitObservation, IssueObservation
+For schema types (type hints, manual construction):
+
+    from src.schema import CommitObservation, IOC, EvidenceSource
 """
 
 from typing import Annotated, Union
 
-from pydantic import Field
+from pydantic import Field, TypeAdapter
 
 from .store import EvidenceStore
 
-# Enums - Safe to expose, these are just constants
-from .schema.common import (
-    EvidenceSource,
-    EventType,
-    RefType,
-    PRAction,
-    IssueAction,
-    WorkflowConclusion,
-    IOCType,
-)
-
-# Type aliases for external use
-from .schema.common import AnyEvidence, AnyEvent, AnyObservation
-
-# Import all schema classes for discriminated union and TYPE_CHECKING exports
+# Import all types needed for discriminated union deserialization
 from .schema.events import (
-    # Events
     PushEvent,
     PullRequestEvent,
     IssueEvent,
@@ -63,10 +45,9 @@ from .schema.events import (
     WatchEvent,
     MemberEvent,
     PublicEvent,
+    AnyEvent,
 )
-
 from .schema.observations import (
-    # Observations
     CommitObservation,
     IssueObservation,
     FileObservation,
@@ -77,52 +58,33 @@ from .schema.observations import (
     SnapshotObservation,
     IOC,
     ArticleObservation,
+    AnyObservation,
 )
 
-from .schema.common import (
-    # Common models (for type hints)
-    GitHubActor,
-    GitHubRepository,
-    VerificationInfo,
-    VerificationResult,
-)
+# Re-export commonly used enums for convenience
+from .schema.common import EvidenceSource, IOCType
 
-# Pydantic discriminated union for efficient JSON deserialization
+# Combined type alias
+AnyEvidence = AnyEvent | AnyObservation
+
+# Pydantic discriminated unions for efficient JSON deserialization
 _EventUnion = Annotated[
     Union[
-        PushEvent,
-        PullRequestEvent,
-        IssueEvent,
-        IssueCommentEvent,
-        CreateEvent,
-        DeleteEvent,
-        ForkEvent,
-        WorkflowRunEvent,
-        ReleaseEvent,
-        WatchEvent,
-        MemberEvent,
-        PublicEvent,
+        PushEvent, PullRequestEvent, IssueEvent, IssueCommentEvent,
+        CreateEvent, DeleteEvent, ForkEvent, WorkflowRunEvent,
+        ReleaseEvent, WatchEvent, MemberEvent, PublicEvent,
     ],
     Field(discriminator="event_type"),
 ]
 
 _ObservationUnion = Annotated[
     Union[
-        CommitObservation,
-        IssueObservation,
-        FileObservation,
-        ForkObservation,
-        BranchObservation,
-        TagObservation,
-        ReleaseObservation,
-        SnapshotObservation,
-        IOC,
-        ArticleObservation,
+        CommitObservation, IssueObservation, FileObservation, ForkObservation,
+        BranchObservation, TagObservation, ReleaseObservation, SnapshotObservation,
+        IOC, ArticleObservation,
     ],
     Field(discriminator="observation_type"),
 ]
-
-from pydantic import TypeAdapter
 
 _event_adapter = TypeAdapter(_EventUnion)
 _observation_adapter = TypeAdapter(_ObservationUnion)
@@ -156,58 +118,16 @@ def load_evidence_from_json(data: dict) -> AnyEvidence:
     raise ValueError("Data must contain 'event_type' or 'observation_type' field")
 
 
+# Public API - minimal surface area
 __all__ = [
-    # Store - Persist and query evidence collections
+    # Main entry points
     "EvidenceStore",
-    # Enums
-    "EvidenceSource",
-    "EventType",
-    "RefType",
-    "PRAction",
-    "IssueAction",
-    "WorkflowConclusion",
-    "IOCType",
-    # Loading from JSON
     "load_evidence_from_json",
-    # Type aliases
+    # Type aliases (for type hints)
     "AnyEvidence",
     "AnyEvent",
     "AnyObservation",
-    # Type hints (for static analysis)
-    "GitHubActor",
-    "GitHubRepository",
-    "VerificationInfo",
-    "VerificationResult",
-    "Event",
-    "Observation",
-    "CommitAuthor",
-    "FileChange",
-    "CommitInPush",
-    "WaybackSnapshot",
-    "PushEvent",
-    "PullRequestEvent",
-    "IssueEvent",
-    "IssueCommentEvent",
-    "CreateEvent",
-    "DeleteEvent",
-    "ForkEvent",
-    "WorkflowRunEvent",
-    "ReleaseEvent",
-    "WatchEvent",
-    "MemberEvent",
-    "PublicEvent",
-    "CommitObservation",
-    "IssueObservation",
-    "FileObservation",
-    "ForkObservation",
-    "BranchObservation",
-    "TagObservation",
-    "ReleaseObservation",
-    "SnapshotObservation",
-    "IOC",
-    "ArticleObservation",
+    # Commonly used enums
+    "EvidenceSource",
+    "IOCType",
 ]
-
-# Import base classes and helper models from their respective modules
-from .schema.events import Event, CommitInPush
-from .schema.observations import Observation, CommitAuthor, FileChange, WaybackSnapshot

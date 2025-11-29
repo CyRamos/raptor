@@ -11,7 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterator, Sequence
 
-from .schema.common import AnyEvidence, AnyEvent, AnyObservation, EvidenceSource
+from .schema import AnyEvidence, AnyEvent, AnyObservation
+from .schema.common import EvidenceSource
 
 
 class EvidenceStore:
