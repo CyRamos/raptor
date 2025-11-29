@@ -224,49 +224,42 @@ class TestIOCIntegration:
         assert ioc.value == "efee962ff1d1a80cfd6e498104cf72f348955693"
         assert ioc.verification.source == EvidenceSource.SECURITY_VENDOR
 
-    def test_ioc_rejects_value_not_in_source(self, factory, monkeypatch):
+    def test_ioc_rejects_value_not_in_source(self, factory):
         """IOC creation should fail if value is not found in the source.
 
-        Uses monkeypatch to mock the HTTP response, ensuring deterministic behavior.
+        True integration test - hits the real URL.
+        Skips gracefully if external service unavailable.
         """
         import requests
 
-        class MockResponse:
-            status_code = 200
-            text = "This page contains sha: abc123 but not the value we're looking for"
+        source_url = "https://mbgsec.com/posts/2025-07-24-constructing-a-timeline-for-amazon-q-prompt-infection/"
 
-            def raise_for_status(self):
-                pass
+        # Pre-flight check: skip if service unavailable
+        try:
+            resp = requests.get(source_url, timeout=10)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            pytest.skip(f"External service unavailable: {e}")
 
-        def mock_get(*args, **kwargs):
-            return MockResponse()
-
-        monkeypatch.setattr(requests, "get", mock_get)
-
+        # Actual test
         with pytest.raises(ValueError, match="not found in source"):
             factory.ioc(
                 ioc_type=IOCType.COMMIT_SHA,
-                value="this_sha_is_not_in_the_page",
-                source_url="https://example.com/article",
+                value="this_sha_is_definitely_not_in_article_xyz123",
+                source_url=source_url,
             )
 
-    def test_ioc_fails_on_invalid_url(self, factory, monkeypatch):
+    def test_ioc_fails_on_invalid_url(self, factory):
         """IOC creation should fail gracefully on unreachable URLs.
 
-        Uses monkeypatch to simulate connection error, ensuring deterministic behavior.
+        True integration test - verifies actual network error handling.
+        Uses .invalid TLD which is guaranteed to not resolve (RFC 2606).
         """
-        import requests
-
-        def mock_get(*args, **kwargs):
-            raise requests.exceptions.ConnectionError("Simulated connection failure")
-
-        monkeypatch.setattr(requests, "get", mock_get)
-
         with pytest.raises(ValueError, match="Failed to fetch"):
             factory.ioc(
                 ioc_type=IOCType.COMMIT_SHA,
                 value="anything",
-                source_url="https://unreachable.example.com/article",
+                source_url="https://this-will-never-resolve.invalid/article",
             )
 
 
