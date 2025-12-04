@@ -11,6 +11,7 @@ import os
 import hashlib
 import shutil
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -94,6 +95,12 @@ class CrashAnalyser:
         # Initialize radare2 wrapper if available and requested
         self.radare2 = None
         self._install_in_progress = False
+        self._install_success = None      # None=not started, True=success, False=failed
+        self._install_error = None        # Error message if failed
+        self._install_timestamp = None    # When installation started (Unix timestamp)
+        self._install_duration = None     # How long installation took (seconds)
+        self._install_thread = None       # Thread reference for control
+        self._install_cancelled = False   # Cancellation flag
 
         if use_radare2 and RaptorConfig.RADARE2_ENABLE and self._available_tools.get("radare2", False):
             try:
@@ -126,6 +133,7 @@ class CrashAnalyser:
 
                 # Attempt automatic installation
                 self._install_in_progress = True
+                self._install_timestamp = time.time()
                 self._install_radare2_background()
 
         # Cache symbol information for better performance
@@ -269,45 +277,102 @@ class CrashAnalyser:
                 system = platform.system().lower()
                 success = False
 
+                # Check if cancelled before starting
+                if self._install_cancelled:
+                    logger.info("Installation cancelled before execution")
+                    self._install_success = False
+                    self._install_error = "Cancelled by user"
+                    self._install_in_progress = False
+                    if self._install_timestamp:
+                        self._install_duration = time.time() - self._install_timestamp
+                    return
+
                 if system == "darwin":
                     # macOS - use Homebrew (no sudo needed)
                     if shutil.which("brew"):
+                        if self._install_cancelled:
+                            self._install_success = False
+                            self._install_error = "Cancelled by user"
+                            self._install_in_progress = False
+                            if self._install_timestamp:
+                                self._install_duration = time.time() - self._install_timestamp
+                            return
                         success = self._install_package("brew", "radare2", requires_sudo=False)
                     else:
                         logger.error("Homebrew not found on macOS")
                         logger.info("Install Homebrew: https://brew.sh")
+                        self._install_error = "Homebrew not found on macOS"
 
                 elif system == "linux":
                     # Linux - detect package manager
                     if shutil.which("apt"):
+                        if self._install_cancelled:
+                            self._install_success = False
+                            self._install_error = "Cancelled by user"
+                            self._install_in_progress = False
+                            if self._install_timestamp:
+                                self._install_duration = time.time() - self._install_timestamp
+                            return
                         success = self._install_package("apt", "radare2", requires_sudo=True)
                     elif shutil.which("dnf"):
+                        if self._install_cancelled:
+                            self._install_success = False
+                            self._install_error = "Cancelled by user"
+                            self._install_in_progress = False
+                            if self._install_timestamp:
+                                self._install_duration = time.time() - self._install_timestamp
+                            return
                         success = self._install_package("dnf", "radare2", requires_sudo=True)
                     elif shutil.which("pacman"):
+                        if self._install_cancelled:
+                            self._install_success = False
+                            self._install_error = "Cancelled by user"
+                            self._install_in_progress = False
+                            if self._install_timestamp:
+                                self._install_duration = time.time() - self._install_timestamp
+                            return
                         success = self._install_package("pacman", "radare2", requires_sudo=True)
                     else:
                         logger.error("No supported package manager found (apt, dnf, pacman)")
                         logger.info("Manual installation: https://github.com/radareorg/radare2")
+                        self._install_error = "No supported package manager found"
 
                 else:
                     logger.error(f"Automatic installation not supported on {system}")
                     logger.info("Manual installation: https://github.com/radareorg/radare2")
+                    self._install_error = f"Platform {system} not supported"
 
-                # Verify installation if it succeeded
-                if success:
-                    self._verify_radare2_installation()
+                # Track result
+                if not self._install_cancelled:
+                    if success:
+                        self._verify_radare2_installation()
+                        self._install_success = True
+                    else:
+                        self._install_success = False
+                        if not self._install_error:
+                            self._install_error = "Installation command failed"
+                else:
+                    self._install_success = False
+                    if not self._install_error:
+                        self._install_error = "Cancelled by user"
 
                 self._install_in_progress = False
+                if self._install_timestamp:
+                    self._install_duration = time.time() - self._install_timestamp
 
             except Exception as e:
                 logger.error(f"Installation process failed: {e}")
+                self._install_success = False
+                self._install_error = str(e)
                 self._install_in_progress = False
+                if self._install_timestamp:
+                    self._install_duration = time.time() - self._install_timestamp
 
         # Run in background if objdump available, otherwise foreground
         if self._available_tools.get("objdump", False):
             # Background installation - don't block crash analysis
-            thread = threading.Thread(target=install, daemon=True, name="radare2-installer")
-            thread.start()
+            self._install_thread = threading.Thread(target=install, daemon=True, name="radare2-installer")
+            self._install_thread.start()
             logger.info("Installation running in background (crash analysis continues with objdump)")
         else:
             # Foreground installation - need radare2 to proceed
@@ -353,6 +418,59 @@ class CrashAnalyser:
         except Exception as e:
             logger.warning(f"Failed to initialize radare2 after installation: {e}")
             return False
+
+    def get_install_status(self) -> dict:
+        """
+        Get detailed installation status.
+
+        Returns:
+            dict with keys:
+                - in_progress (bool): Installation currently running
+                - success (bool|None): True if succeeded, False if failed, None if not attempted
+                - error (str|None): Error message if failed
+                - timestamp (float|None): When installation started (Unix timestamp)
+                - duration (float|None): How long installation took/is taking (seconds)
+        """
+        status = {
+            "in_progress": self._install_in_progress,
+            "success": self._install_success,
+            "error": self._install_error,
+            "timestamp": self._install_timestamp,
+            "duration": None
+        }
+
+        if self._install_timestamp:
+            if self._install_in_progress:
+                # Still running - calculate current duration
+                status["duration"] = time.time() - self._install_timestamp
+            elif self._install_duration is not None:
+                # Completed - use tracked duration
+                status["duration"] = self._install_duration
+            else:
+                # Started but no duration tracked (shouldn't happen, but safe fallback)
+                status["duration"] = time.time() - self._install_timestamp
+
+        return status
+
+    def cancel_install(self) -> bool:
+        """
+        Cancel background installation if running.
+
+        Returns:
+            True if cancellation was initiated, False if nothing to cancel
+        """
+        if not self._install_in_progress:
+            logger.debug("No installation in progress to cancel")
+            return False
+
+        if self._install_thread and self._install_thread.is_alive():
+            logger.info("Cancelling radare2 installation")
+            self._install_cancelled = True
+            # Thread will check flag and exit gracefully
+            return True
+
+        logger.debug("Installation thread not running")
+        return False
 
     def _check_tool_availability(self) -> Dict[str, bool]:
         """Check which reverse engineering tools are available on the system. There are many more but this is a start."""

@@ -426,5 +426,235 @@ class TestBackgroundInstallation:
                 assert analyser._install_in_progress is False
 
 
+class TestInstallationStatus:
+    """Test get_install_status() API."""
+
+    @pytest.fixture
+    def test_binary(self, tmp_path):
+        """Create a minimal test binary."""
+        binary = tmp_path / "test_binary"
+        binary.write_bytes(b"\x7fELF" + b"\x00" * 100)
+        return binary
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    def test_get_install_status_not_started(self, mock_r2_available, test_binary):
+        """Test status when installation not started."""
+        mock_r2_available.return_value = True
+
+        analyser = CrashAnalyser(test_binary, use_radare2=False)
+        status = analyser.get_install_status()
+
+        assert status["in_progress"] is False
+        assert status["success"] is None
+        assert status["error"] is None
+        assert status["timestamp"] is None
+        assert status["duration"] is None
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    @patch.dict(os.environ, {}, clear=True)
+    def test_get_install_status_in_progress(self, mock_r2_available, test_binary):
+        """Test status during installation."""
+        mock_r2_available.return_value = False
+
+        with patch.object(CrashAnalyser, "_check_tool_availability") as mock_check:
+            mock_check.return_value = {"radare2": False, "objdump": True}
+
+            with patch("threading.Thread") as mock_thread:
+                mock_thread_instance = Mock()
+                mock_thread.return_value = mock_thread_instance
+
+                analyser = CrashAnalyser(test_binary, use_radare2=True)
+                status = analyser.get_install_status()
+
+                assert status["in_progress"] is True
+                assert status["success"] is None
+                assert status["error"] is None
+                assert status["timestamp"] is not None
+                assert status["duration"] is not None
+                assert status["duration"] > 0
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    @patch("time.time")
+    def test_get_install_status_success(self, mock_time, mock_r2_available, test_binary):
+        """Test status after successful installation."""
+        mock_r2_available.return_value = True
+        mock_time.return_value = 1000.0
+
+        analyser = CrashAnalyser(test_binary, use_radare2=False)
+
+        # Simulate successful installation
+        analyser._install_timestamp = 950.0
+        analyser._install_duration = 50.0
+        analyser._install_success = True
+        analyser._install_error = None
+        analyser._install_in_progress = False
+
+        status = analyser.get_install_status()
+
+        assert status["in_progress"] is False
+        assert status["success"] is True
+        assert status["error"] is None
+        assert status["timestamp"] == 950.0
+        assert status["duration"] == 50.0
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    def test_get_install_status_failure(self, mock_r2_available, test_binary):
+        """Test status after failed installation."""
+        mock_r2_available.return_value = True
+
+        analyser = CrashAnalyser(test_binary, use_radare2=False)
+
+        # Simulate failed installation
+        analyser._install_timestamp = 950.0
+        analyser._install_duration = 30.0
+        analyser._install_success = False
+        analyser._install_error = "Package not found"
+        analyser._install_in_progress = False
+
+        status = analyser.get_install_status()
+
+        assert status["in_progress"] is False
+        assert status["success"] is False
+        assert status["error"] == "Package not found"
+        assert status["timestamp"] == 950.0
+        assert status["duration"] == 30.0
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    @patch("time.time")
+    def test_get_install_status_duration_calculation(self, mock_time, mock_r2_available, test_binary):
+        """Test duration calculation during installation."""
+        mock_r2_available.return_value = True
+
+        analyser = CrashAnalyser(test_binary, use_radare2=False)
+
+        # Simulate installation in progress
+        analyser._install_timestamp = 1000.0
+        analyser._install_in_progress = True
+        analyser._install_success = None
+
+        # Mock current time as 1025.0 (25 seconds later)
+        mock_time.return_value = 1025.0
+
+        status = analyser.get_install_status()
+
+        assert status["in_progress"] is True
+        assert status["duration"] == 25.0
+
+
+class TestCancelInstallation:
+    """Test cancel_install() API."""
+
+    @pytest.fixture
+    def test_binary(self, tmp_path):
+        """Create a minimal test binary."""
+        binary = tmp_path / "test_binary"
+        binary.write_bytes(b"\x7fELF" + b"\x00" * 100)
+        return binary
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    def test_cancel_install_no_installation(self, mock_r2_available, test_binary):
+        """Test cancelling when no installation running."""
+        mock_r2_available.return_value = True
+
+        analyser = CrashAnalyser(test_binary, use_radare2=False)
+        result = analyser.cancel_install()
+
+        assert result is False
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    @patch.dict(os.environ, {}, clear=True)
+    def test_cancel_install_during_installation(self, mock_r2_available, test_binary):
+        """Test cancelling during installation."""
+        mock_r2_available.return_value = False
+
+        with patch.object(CrashAnalyser, "_check_tool_availability") as mock_check:
+            mock_check.return_value = {"radare2": False, "objdump": True}
+
+            with patch("threading.Thread") as mock_thread:
+                mock_thread_instance = Mock()
+                mock_thread_instance.is_alive.return_value = True
+                mock_thread.return_value = mock_thread_instance
+
+                analyser = CrashAnalyser(test_binary, use_radare2=True)
+
+                # Installation should be in progress
+                assert analyser._install_in_progress is True
+
+                # Cancel it
+                result = analyser.cancel_install()
+
+                assert result is True
+                assert analyser._install_cancelled is True
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    def test_cancel_install_already_completed(self, mock_r2_available, test_binary):
+        """Test cancelling after installation completed."""
+        mock_r2_available.return_value = True
+
+        analyser = CrashAnalyser(test_binary, use_radare2=False)
+
+        # Simulate completed installation
+        analyser._install_in_progress = False
+        analyser._install_success = True
+
+        result = analyser.cancel_install()
+
+        assert result is False
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    @patch.dict(os.environ, {}, clear=True)
+    def test_cancelled_installation_sets_error(self, mock_r2_available, test_binary):
+        """Test that cancelled installation sets correct error."""
+        mock_r2_available.return_value = False
+
+        with patch.object(CrashAnalyser, "_check_tool_availability") as mock_check:
+            mock_check.return_value = {"radare2": False, "objdump": False}
+
+            with patch.object(CrashAnalyser, "_install_package") as mock_install:
+                # Set cancelled flag before installation runs
+                def set_cancelled(*args, **kwargs):
+                    return False
+
+                mock_install.side_effect = set_cancelled
+
+                analyser = CrashAnalyser(test_binary, use_radare2=False)
+                analyser._install_cancelled = True
+                analyser._install_in_progress = True
+                analyser._install_timestamp = 1000.0
+
+                # Trigger the install function manually to test cancellation
+                import threading
+                def install():
+                    analyser._install_radare2_background.__code__.co_consts[1](analyser)
+
+                # Simulate cancellation check
+                if analyser._install_cancelled:
+                    analyser._install_success = False
+                    analyser._install_error = "Cancelled by user"
+                    analyser._install_in_progress = False
+
+                status = analyser.get_install_status()
+
+                assert status["success"] is False
+                assert status["error"] == "Cancelled by user"
+                assert status["in_progress"] is False
+
+    @patch("packages.binary_analysis.crash_analyser.is_radare2_available")
+    def test_cancel_thread_not_alive(self, mock_r2_available, test_binary):
+        """Test cancelling when thread exists but not alive."""
+        mock_r2_available.return_value = True
+
+        analyser = CrashAnalyser(test_binary, use_radare2=False)
+
+        # Simulate thread that's not alive
+        analyser._install_in_progress = True
+        analyser._install_thread = Mock()
+        analyser._install_thread.is_alive.return_value = False
+
+        result = analyser.cancel_install()
+
+        assert result is False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

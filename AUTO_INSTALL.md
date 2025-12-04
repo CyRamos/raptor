@@ -113,6 +113,50 @@ if analyser.reload_radare2():
     print("Enhanced features enabled")
 ```
 
+### get_install_status()
+Get detailed installation status information:
+```python
+status = analyser.get_install_status()
+
+# Status dictionary contains:
+# - in_progress (bool): Installation currently running
+# - success (bool|None): True if succeeded, False if failed, None if not attempted
+# - error (str|None): Error message if failed
+# - timestamp (float|None): When installation started (Unix timestamp)
+# - duration (float|None): How long installation took/is taking (seconds)
+
+if status["in_progress"]:
+    print(f"Installing... ({status['duration']:.1f}s elapsed)")
+elif status["success"]:
+    print(f"Installed successfully in {status['duration']:.1f}s")
+elif status["success"] is False:
+    print(f"Installation failed: {status['error']}")
+else:
+    print("No installation attempted")
+```
+
+### cancel_install()
+Cancel background installation if running:
+```python
+analyser = CrashAnalyser(binary_path, use_radare2=True)
+
+# Wait a bit
+time.sleep(5)
+
+# User decides to cancel
+if analyser.cancel_install():
+    print("Installation cancelled")
+
+# Check status
+status = analyser.get_install_status()
+if status["error"] == "Cancelled by user":
+    print("Confirmed: installation was cancelled")
+```
+
+Returns `True` if cancellation was initiated, `False` if nothing to cancel.
+
+**Note:** Cancellation is graceful and thread-safe. The installation thread checks the cancellation flag before major operations and exits cleanly.
+
 ## Troubleshooting
 
 ### Installation Fails
@@ -134,6 +178,21 @@ Solution: Ensure radare2 (or r2) is in your PATH:
 which r2  # Should show path to radare2
 echo $PATH  # Should include /usr/local/bin or similar
 ```
+
+### Cancellation Not Working
+
+If `cancel_install()` returns `False` when you expect it to work:
+
+1. Check installation status first:
+```python
+status = analyser.get_install_status()
+if not status["in_progress"]:
+    print("No installation running to cancel")
+```
+
+2. Cancellation only works during background installation. Foreground installation is blocking and cannot be cancelled.
+
+3. The installation thread may have already completed between checking status and calling cancel.
 
 ## Security Considerations
 
@@ -186,7 +245,7 @@ All platform-specific installation logic uses a single `_install_package()` help
 
 ## Test Coverage
 
-Comprehensive test suite (24 tests) covering:
+Comprehensive test suite (34 tests) covering:
 - Environment variable handling (RAPTOR_NO_AUTO_INSTALL)
 - CI detection (GitHub Actions, GitLab CI, CircleCI, etc.)
 - Package installation (brew, apt, dnf, pacman)
@@ -194,6 +253,10 @@ Comprehensive test suite (24 tests) covering:
 - Reload functionality
 - Background vs foreground modes
 - Error scenarios (timeout, failure, no package manager)
+- Installation status API (get_install_status)
+- Cancellation API (cancel_install)
+- State tracking and transitions
+- Duration calculation
 
 Run tests:
 ```bash
