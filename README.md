@@ -54,7 +54,7 @@ RAPTOR stands for Recursive Autonomous Penetration Testing and Observation Robot
 3. **Analyses** vulnerabilities using advanced LLM reasoning
 4. **Exploits** by generating proof-of-concepts
 5. **Patches** with code to fix vulnerabilities
-6. **Crash Analysis** with radare2, rr debugger, and function tracing
+6. **Crash Analysis** with rr debugger and function tracing
 7. **OSS Forensics** for evidence-backed GitHub repository investigations
 8. **Reports** everything in structured formats
 
@@ -77,42 +77,6 @@ without asking, check dependencies.txt first.
 
 Beyond RAPTOR's potential for autonomous security research and community collaboration, it
 demonstrates how Claude Code can be adapted for **any purpose**, with RAPTOR packages.
-
----
-
-## Recent Updates
-
-### December 4, 2025: Enhanced Binary Analysis with radare2
-
-RAPTOR now features comprehensive radare2 (r2) integration for advanced crash analysis:
-
-**New Capabilities:**
-- **Function Detection:** Automatic function discovery and analysis
-- **Disassembly:** Context-aware disassembly at crash addresses
-- **Decompilation:** Pseudo-C code generation (with r2-ghidra)
-- **Security Analysis:** Automatic detection of stack canaries, NX, PIE, ASLR
-- **Cross-References:** Call graph and xref analysis for crash context
-- **Performance:** 40% faster analysis, 50% fewer timeouts, auto-scaled by binary size
-
-**Architecture:** Optimized for reliability with inline analysis pattern ensuring consistent results across r2 versions.
-
-
-### OSS Forensics Investigation
-
-RAPTOR now includes comprehensive GitHub forensics capabilities via the `/oss-forensics` command:
-
-**New Capabilities:**
-- **Evidence Collection:** Multi-source evidence gathering (GH Archive, GitHub API, Wayback Machine, local git)
-- **BigQuery Integration:** Query immutable GitHub event data via GH Archive
-- **Deleted Content Recovery:** Recover deleted commits, issues, and repository content
-- **IOC Extraction:** Automated extraction of indicators of compromise from vendor reports
-- **Evidence Verification:** Rigorous evidence validation against original sources
-- **Hypothesis Formation:** AI-powered evidence-backed hypothesis generation with iterative refinement
-- **Forensic Reporting:** Detailed reports with timeline, attribution, and IOCs
-
-**Architecture:** Multi-agent orchestration with specialized investigators for parallel evidence collection and sequential analysis pipeline.
-
-**Documentation:** See `.claude/commands/oss-forensics.md` and `.claude/skills/oss-forensics/` for complete details.
 
 ---
 
@@ -336,7 +300,6 @@ python3 raptor.py fuzz --binary /path/to/binary --duration 3600
 - **ARCHITECTURE.md** - Technical architecture details
 - **EXTENDING_LAUNCHER.md** - How to add new capabilities
 - **FUZZING_QUICKSTART.md** - Binary fuzzing guide
-- **RADARE2_INTEGRATION.md** - radare2 binary analysis guide
 - **.claude/commands/oss-forensics.md** - OSS forensics investigation guide
 - **DEPENDENCIES.md** - External tools and licenses
 - **tiers/personas/README.md** - All 9 expert personas
