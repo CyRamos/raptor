@@ -61,7 +61,8 @@ RAPTOR stands for Recursive Autonomous Penetration Testing and Observation Robot
 6. **FFmpeg-specific** patching for Google's recent disclosure
    (https://news.ycombinator.com/item?id=45891016)
 7. **OSS Forensics** for evidence-backed GitHub repository investigations
-8. **Reports** everything in structured formats
+8. **Agentic Skills Engine** for security reserach & operations ([SecOpsAgentKit](https://github.com/AgentSecOps/SecOpsAgentKit)) 
+9. **Reports** everything in structured formats
 
 RAPTOR combines traditional security tools with agentic automation and analysis, deeply
 understands your code, proves exploitability, and proposes patches.
@@ -239,6 +240,7 @@ Usage: "Use [persona name]"
 - Bootstrap (CLAUDE.md) → Always loaded
 - Tier1 (adversarial thinking, analysis-guidance, recovery) → Auto-loads when relevant
 - Tier2 (9 expert personas) → Load on explicit request
+- Agents (offsec-specialist) → Autonomous offensive security operations
 - Alpha (custom skills) → User-created
 
 **Python Execution Layer:**
@@ -246,6 +248,10 @@ Usage: "Use [persona name]"
 - packages/ → 9 security capabilities
 - core/ → Shared utilities
 - engine/ → Rules and queries
+
+**Skills & Agents:**
+- `.claude/skills/SecOpsAgentKit/` → Offensive security skills (git submodule)
+- `.claude/agents/offsec-specialist.md` → Offensive security agent
 
 **Key features:**
 - **Adversarial thinking:** Prioritizes findings by Impact × Exploitability / Detection Time
